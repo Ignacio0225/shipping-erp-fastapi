@@ -5,7 +5,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status  # FastAPI의 핵심 기능들: 라우터, 의존성 주입, 예외 처리
 from fastapi.security import OAuth2PasswordBearer  # OAuth2 방식의 인증 처리기
 from sqlalchemy.ext.asyncio import AsyncSession  # 비동기 세션
-# from sqlalchemy.orm import Session  # SQLAlchemy의 DB 세션 타입(동기)
+# from sqlalchemy.orm import Session  # SQLAlchemy의 DB 세션 타입(동기) 비동기로 진행해서 사용하지 않음
 from sqlalchemy.future import select  # SQL 쿼리문을 비동기로 작성
 from jose import jwt, JWTError  # JWT 토큰 생성 및 디코딩
 from pydantic import ValidationError  # Pydantic 모델 검증 에러 처리
