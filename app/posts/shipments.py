@@ -9,9 +9,11 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, r
 from pathlib import Path
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, delete, func, or_
+from sqlalchemy.orm import selectinload
 
-from app.users import users_models
-from app.posts import shipments_models
+
+from app.users import users_models, users_schemas
+from app.posts import shipments_models, Shipment
 from app.posts import shipments_schemas
 from app import database
 from app.users import dependencies
@@ -26,7 +28,7 @@ UPLOAD_DIR = 'public'  # 원하는 폴더로 변경 가능
 
 # 전체 포스트 리스트 조회 가능 (페이지네이션기능포함) (로그인된 모든 사용자)
 # 전체 포스트 리스트 조회 가능 (모든 게시글 한 번에 반환)
-@router.get('/shipments', response_model=list[shipments_schemas.ShipmentOut])
+@router.get('/shipments', response_model=shipments_schemas.ShipmentsPageOut)
 async def list_shipment(
         page: int = 1,  # page 를 기본값을 1을줌
         size: int = 10,  # 리스트 사이즈를 10개를줌
@@ -67,9 +69,28 @@ async def list_shipment(
         shipments_models.Shipment.created_at.desc()
     ).offset(offset).limit(size) # limit = size <-항상 요청한 페이지당 최대 개수만큼만 반환 사이즈는 무조건 10(게시글이 10개만나옴)
 
+    base_query = base_query.options(selectinload(shipments_models.Shipment.creator))
+
     result = await db.execute(base_query)
 
     shipments = result.scalars().all()  # 전체 레코드 가져오기
+
+    items = [
+        shipments_schemas.ShipmentOut(
+            id=s.id,
+            title=s.title,
+            description=s.description,
+            created_at=s.created_at,
+            file_paths=s.file_paths,
+            creator=users_schemas.UserOut(
+                id=s.creator.id,
+                email=s.creator.email,
+                role=s.creator.role,
+                username=s.creator.username
+            )
+        )
+        for s in shipments
+    ]
 
     # 검색 조건이 있으면 필터링된 총 개수를 가져옴
     if search:
@@ -84,7 +105,7 @@ async def list_shipment(
     total_count = await db.scalar(total_count_query)
 
     return {
-        "items": shipments,  # 실제 데이터 (리스트)
+        "items": items,  # 실제 데이터 (리스트)
         "total": total_count,  # 전체 게시글 수
         "page": page,  # 현재 페이지
         "size": size,  # 페이지당 게시글 수
@@ -183,10 +204,8 @@ async def update_shipment(
         for file in new_file_paths:  # for 문을 돌림
             os.makedirs(UPLOAD_DIR, exist_ok=True)
             saved_path = os.path.join(UPLOAD_DIR, f"{uuid.uuid4()}_{file.filename}")
-            with open(saved_path,
-                      'wb') as buffer:  # 새로 만들 파일을 열고 'wb : write binary' 파일을 바이너리로 파일에 써줄 준비를함, 준비하고 buffer라고 부름
-                shutil.copyfileobj(file.file,
-                                   buffer)  # file.file의 첫 file은 for문을 도는 실제 객체 뒷 file은 바이너리 메서드 -> 를 buffer에 써줌
+            with open(saved_path,'wb') as buffer:  # 새로 만들 파일을 열고 'wb : write binary' 파일을 바이너리로 파일에 써줄 준비를함, 준비하고 buffer라고 부름
+                shutil.copyfileobj(file.file,buffer)  # file.file의 첫 file은 for문을 도는 실제 객체 뒷 file은 바이너리 메서드 -> 를 buffer에 써줌
             file_paths.append(saved_path)
 
     await db.execute(

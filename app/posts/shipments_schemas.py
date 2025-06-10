@@ -1,6 +1,10 @@
 # app/posts/shipments_schemas.py
 # API 요청과 응답에 사용될 Pydantic 모델을 정의하는 파일
 
+from app.users import users_schemas
+
+
+from typing import List
 from pydantic import BaseModel
 from datetime import datetime
 
@@ -29,7 +33,15 @@ class ShipmentOut(ShipmentBase):
     id:int
     file_paths:list[str] | None
     created_at:datetime
-    creator_id:int
+    creator:users_schemas.UserOut
 
     class Config:
         from_attributes = True
+
+
+class ShipmentsPageOut(BaseModel):
+    items: List[ShipmentOut]
+    total: int
+    page: int
+    size: int
+    total_pages: int
