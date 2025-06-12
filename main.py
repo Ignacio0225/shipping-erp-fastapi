@@ -37,6 +37,6 @@ app.add_middleware(
 # 기본 루트 API 정의
 @app.get('/')
 def read_root():
-    return {'message':'Hello from FastAPI!ㅃ'}
+    return {'message':'Hello from FastAPI!'}
 
 
