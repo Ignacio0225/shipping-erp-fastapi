@@ -28,17 +28,18 @@ class ShipmentUpdate(BaseModel):
 
 
 
-#데이터를 받아올때 유효성검사를 위한 모델에 사용
+#데이터를 받아올때 유효성검사를 위한 모델에 사용 (파일 패스가 리스트기때문에)
 class ShipmentOut(ShipmentBase):
     id:int
     file_paths:list[str] | None
     created_at:datetime
+    # updated_at 추가 예정
     creator:users_schemas.UserOut
 
     class Config:
         from_attributes = True
 
-
+# ShipmentOut 자체를 리스트에 다 담아줌
 class ShipmentsPageOut(BaseModel):
     items: List[ShipmentOut]
     total: int
