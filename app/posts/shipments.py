@@ -131,7 +131,7 @@ async def get_shipment(
 
 
 # 스태프 이상만 생성 (파일업로드 기능도)
-@router.post('/shipments', response_model=shipments_schemas.ShipmentOut, status_code=201)
+@router.post('/shipments/', response_model=shipments_schemas.ShipmentOut, status_code=201)
 async def create_shipment(
         title: str = Form(...),  # 파일 업로드 때문에 따로 Form 으로 설정 (multipart/form-data 형식, json 아님)
         description: str = Form(...),  # 파일 업로드 때문에 따로 Form 으로 설정 (multipart/form-data 형식, json 아님)
@@ -150,16 +150,14 @@ async def create_shipment(
 
         for file in files:
             os.makedirs(UPLOAD_DIR, exist_ok=True)  # `UPLOAD_DIR = public` 폴더가 없으면 자동으로 만들어 줍니다, 이미 존재하면 그냥 넘어감.
-            saved_path = os.path.join(UPLOAD_DIR,
-                                      f"{uuid.uuid4()}_{file.filename}")  # 실제 저장할 파일 경로 생성, 예: `UPLOAD_DIR = public/sample.pdf`, uuid로 unique 하게 만들어줌
+            saved_path = os.path.join(UPLOAD_DIR,f"{uuid.uuid4()}_{file.filename}")  # 실제 저장할 파일 경로 생성, 예: `UPLOAD_DIR = public/sample.pdf`, uuid로 unique 하게 만들어줌
             with open(saved_path, 'wb') as buffer:  # 파일 저장용 스트림 열기(열어야 내용물을 알수 있기 때문) (해당 파일을 buffer라고 부르기로 약속)
-                shutil.copyfileobj(file.file,
-                                   buffer)  # 읽어놓은 파일을 통째로 복사해서 저장, `file.file`은 `SpooledTemporaryFile` 객체임 (stream 기반)
+                shutil.copyfileobj(file.file, buffer)  # 읽어놓은 파일을 통째로 복사해서 저장, `file.file`은 `SpooledTemporaryFile` 객체임 (stream 기반)
             new_file_paths.append(saved_path)  # 저장한 경로 리스트에 추가
         file_paths = new_file_paths  # 최종 저장 경로 리스트로 교체
 
     new_ship = shipments_models.Shipment(
-        **payload.model_dump(),  # - title / description  model_dump()는 받아온 title과 description을 각각의 객체로 나눠줌.
+        **payload.model_dump(exclude={'file_paths'}),  # - title / description  model_dump()는 받아온 title과 description을 각각의 객체로 나눠줌.
         file_paths=file_paths,
         creator_id=current_user.id  # - 작성자의 Foreignkey
     )
@@ -210,10 +208,8 @@ async def update_shipment(
         for file in new_file_paths:  # for 문을 돌림
             os.makedirs(UPLOAD_DIR, exist_ok=True)  # 업로드 폴더 없으면 생성
             saved_path = os.path.join(UPLOAD_DIR, f"{uuid.uuid4()}_{file.filename}")  # 새 파일 저장 경로
-            with open(saved_path,
-                      'wb') as buffer:  # 새로 만들 파일을 열고 'wb : write binary' 파일을 바이너리로 파일에 써줄 준비를함, 준비하고 buffer라고 부름
-                shutil.copyfileobj(file.file,
-                                   buffer)  # file.file의 첫 file은 for문을 도는 실제 객체 뒷 file은 바이너리 메서드 -> 를 buffer에 써줌
+            with open(saved_path,'wb') as buffer:  # 새로 만들 파일을 열고 'wb : write binary' 파일을 바이너리로 파일에 써줄 준비를함, 준비하고 buffer라고 부름
+                shutil.copyfileobj(file.file, buffer)  # file.file의 첫 file은 for문을 도는 실제 객체 뒷 file은 바이너리 메서드 -> 를 buffer에 써줌
             file_paths.append(saved_path)  # 새 파일 경로 추가
 
     await db.execute(

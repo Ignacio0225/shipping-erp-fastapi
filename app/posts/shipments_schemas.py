@@ -17,8 +17,7 @@ class ShipmentBase(BaseModel):
 
 #post에 사용
 class ShipmentCreate(ShipmentBase):
-    pass # ShipmentBase를 동일하게 받아옴
-
+    pass
 
 
 #put에 사용
