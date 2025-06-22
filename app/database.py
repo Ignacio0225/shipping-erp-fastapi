@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession  # 비동�
 from sqlalchemy.orm import sessionmaker, declarative_base
 
 # 비동기 DB 연결 정보 (postgresql+asyncpg 사용)
-DATABASE_URL = 'postgresql+asyncpg://erp_user:tjsgur2399@localhost/shipping_erp_db'
+DATABASE_URL = 'postgresql+asyncpg://yusunhyuk:tjsgur2399@localhost/shipping_erp_db'
 
 # SQLAlchemy  비동기 엔진 생성
 engine = create_async_engine(DATABASE_URL)

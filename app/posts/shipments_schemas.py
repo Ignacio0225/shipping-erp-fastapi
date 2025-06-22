@@ -32,7 +32,7 @@ class ShipmentOut(ShipmentBase):
     id:int
     file_paths:list[str] | None
     created_at:datetime
-    # updated_at 추가 예정
+    updated_at:datetime
     creator:users_schemas.UserOut
 
     class Config:

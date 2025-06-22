@@ -32,8 +32,10 @@ def create_access_token(data: dict, expires_delta: timedelta = None):
         expire = datetime.utcnow() + expires_delta  # 전달된 만료시간 적용
     else:
         expire = datetime.utcnow() + timedelta(minutes=15)  # 기본 15분 만료
-    to_encode.update({'exp': expire})  # 만료 시간 추가
+    to_encode.update({'exp': int(expire.timestamp())})  # 만료 시간 추가(정수로 직접 입력해야 해석시간이 줄어서 시간이 정확해짐)
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)  # JWT 토큰 생성
+
+    print(f"토큰 만료 시간 (UTC): {expire} / timestamp: {int(expire.timestamp())}")
     return encoded_jwt  # 인코딩된 JWT 문자열 반환
 
 # ========================= 회원가입 API =========================

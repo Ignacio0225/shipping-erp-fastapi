@@ -38,7 +38,7 @@ async def list_shipment(
 ):
     # 파라미터 방어(음수/0 등) - 장고처럼 ValueError만큼 유연하지 않음(숫자 아닌 값 오면 FastAPI가 422로 막음)
     if page < 1:  # page가 1보다 작으면
-        page = 1  # 다시 page 를 0으로 만들어버림 음수나 0일 들어와버릴경우 페이지 에서 422가 나옴 그래서 방어
+        page = 1  # 다시 page 를 1으로 만들어버림 음수나 0일 들어와버릴경우 페이지 에서 422에러 가 나옴 그래서 방어
 
     if size < 1:  # 리스트가 9개 8 개 7개 올수도 있음 하지만 음수나 0이 나오면 다시 10으로 만들어버림
         size = 10
@@ -167,71 +167,96 @@ async def create_shipment(
     return new_ship  # JSON 직렬화 -> 응답
 
 
-# 게시글 수정(작성자 또는 staff)
-@router.put('/shipments/{ship_id}', response_model=shipments_schemas.ShipmentOut)
+# 게시글 수정 (작성자 또는 staff만 가능)
+@router.put('/shipments/{ship_id}', response_model=shipments_schemas.ShipmentOut)  # PUT 요청 시 이 함수 실행, 수정 후 반환 타입은 ShipmentOut 스키마
 async def update_shipment(
-        ship_id: int,
-        title: str = Form(None),
-        description: str = Form(None),  # 멀티파츠 라서 Form으로 줘야함
-        keep_file_paths: list[str] = Form(None),
-        new_file_paths: list[UploadFile] = File(None),
-        # payload: shipments_schemas.ShipmentUpdate,  # put 이기 때문에 입력된 값을 받아올 수 있음, Form(multipart) 로 설정, 수정안하면 기본값 유지
-        db: AsyncSession = Depends(database.get_db),  # 비동기 DB 세션 주입
-        _: users_models.User = Depends(dependencies.staff_only),
+    ship_id: int,  # URL 경로에서 전달받은 게시글 ID (정수형)
+    title: str = Form(None),  # form-data로 전달된 title 값, 없으면 None (수정 안 했다는 뜻)
+    description: str = Form(None),  # form-data로 전달된 description 값, 없으면 None
+    keep_file_paths: list[str] = Form(None),  # 기존 파일 중 유지하고 싶은 파일 경로 리스트 (없으면 전부 삭제로 처리됨)
+    new_file_paths: list[UploadFile] = File(None),  # 새로 업로드된 파일들 (없을 수도 있음)
+    db: AsyncSession = Depends(database.get_db),  # 비동기 DB 세션을 의존성으로 주입받음 (get_db 함수에서 생성됨)
+    _: users_models.User = Depends(dependencies.staff_only),  # 로그인한 사용자가 staff 권한인지 검사 (아니면 403 에러), 값을 사용하지 않으므로 `_`로 처리
 ):
-    payload = shipments_schemas.ShipmentUpdate(title=title, description=description)  # 수정 입력값을 Pydantic 모델로
+    shipment = await db.get(shipments_models.Shipment, ship_id)  # DB에서 Shipment 테이블에서 해당 ID의 게시글 1개 조회 (없으면 None 반환)
+    if not shipment:  # 조회 결과가 없다면
+        raise HTTPException(404, 'Shipment not found')  # 404 Not Found 에러 발생
 
-    ship = await db.get(shipments_models.Shipment, ship_id)  # 해당 ID의 게시글(선적) 데이터를 DB에서 가져옴
-    if not ship:
-        raise HTTPException(404, 'Shipment not found')
+    payload = shipments_schemas.ShipmentUpdate(title=title, description=description)  # 수정할 데이터(title, description)를 Pydantic 모델로 감쌈 (None 값 포함 가능)
 
-    # 1.삭제할 파일들은 서버에서 삭제 기존 파일들을 집합으로 만들어줌 (리스트 해제)
-    existing_file_paths = set(ship.file_paths or [])  # 기존 파일 경로 리스트 (예: 파일1,파일2,파일3)
+    existing_paths = set(shipment.file_paths or [])  # 기존에 저장된 파일 경로 리스트를 집합(set)으로 변환 (없을 경우 빈 집합)
+    keep_paths = set(keep_file_paths or [])  # 프론트엔드에서 전달받은 유지할 파일 경로 리스트를 집합으로 변환 (없으면 빈 집합)
+    delete_paths = existing_paths - keep_paths  # 기존 파일 중 유지하지 않는 것만 남김 (삭제 대상)
 
-    # 프론트엔드에서 “남길 파일 경로”로 보낸 값들의 집합(set), 예시: {public/uuid_1.pdf, public/uuid_2.xlsx}
-    keep_set = set(keep_file_paths)  # 프론트에서 남기려는 파일 경로 리스트 (예: 파일1 만남길것  파일2, 파일3 은 프론트에서 x표시 해놓음)
+    for path in delete_paths:  # 삭제 대상 파일들을 하나씩 순회
+        if os.path.exists(path):  # 파일이 실제 디스크에 존재하는지 확인
+            os.remove(path)  # 존재하면 파일 삭제 (os.remove는 물리적 삭제, 복구 불가)
 
-    # (3) 삭제 대상 파일(= 기존에 있는데 남기지 않은 것)
-    delete_file_paths = existing_file_paths - keep_set  # 파일1,파일2,파일3 -(빼기) 파일1   = 파일2, 파일3
+    saved_paths = []  # 새로 저장한 파일 경로를 저장할 리스트 (에러 시 롤백용으로 사용)
 
-    for file_path in delete_file_paths:  # 파일2, 파일3 을 for 문
-        if os.path.exists(file_path):  # 파일이 실제로 존재하면 (file_path 는 파일이 아니라 실제 파일 경로 db는 파일을 저장하는게 아니라 경로를 저장 하기 때문)
-            os.remove(file_path)  # 실제 파일 삭제
+    file_paths = list(keep_paths)  # 최종적으로 DB에 저장할 파일 경로 리스트 (유지할 파일들로 초기화)
 
-    # 2. 새 파일 저장 , keep_set(남길 파일) 의 집합(set)을 다시 리스트(list)로 변환한 것, SQLAlchemy 등 DB에 저장할 때는 일반적으로 리스트 타입이어야 하기 때문
-    file_paths = list(keep_set)  # (삭제 안된) 파일 경로만 리스트로 변환
+    try:
+        if new_file_paths:  # 새로 업로드된 파일이 있는 경우
+            os.makedirs(UPLOAD_DIR, exist_ok=True)  # 업로드 디렉토리가 없으면 생성 (기존에 있으면 생략)
+            for file in new_file_paths:  # 새 파일 리스트를 하나씩 반복
+                save_path = os.path.join(UPLOAD_DIR, f"{uuid.uuid4()}_{file.filename}")  # 고유한 파일명을 만들기 위해 UUID를 앞에 붙임
 
-    if new_file_paths:  # 업로드 된 파일이 있으면
-        # 파일이 한 개만 넘어오면 리스트로 감싸줌
-        if isinstance(new_file_paths, UploadFile):  # 단일 파일일 때 리스트로 변환
-            new_file_paths = [new_file_paths]
-        for file in new_file_paths:  # for 문을 돌림
-            os.makedirs(UPLOAD_DIR, exist_ok=True)  # 업로드 폴더 없으면 생성
-            saved_path = os.path.join(UPLOAD_DIR, f"{uuid.uuid4()}_{file.filename}")  # 새 파일 저장 경로
-            with open(saved_path,'wb') as buffer:  # 새로 만들 파일을 열고 'wb : write binary' 파일을 바이너리로 파일에 써줄 준비를함, 준비하고 buffer라고 부름
-                shutil.copyfileobj(file.file, buffer)  # file.file의 첫 file은 for문을 도는 실제 객체 뒷 file은 바이너리 메서드 -> 를 buffer에 써줌
-            file_paths.append(saved_path)  # 새 파일 경로 추가
+                with open(save_path, 'wb') as buffer:  # 새 파일을 바이너리 쓰기 모드로 열고 buffer라는 변수명으로 사용
+                    shutil.copyfileobj(file.file, buffer)  # UploadFile 객체에서 파일을 읽어서 buffer에 씀 (실제 파일 저장)
 
-    await db.execute(
-        update(shipments_models.Shipment)  # Shipment의 모델 형식으로
-        .where(shipments_models.Shipment.id == ship_id)  # Shipment.id 가 ship_id 랑같은것만
-        .values(**payload.model_dump(exclude_unset=True), file_paths=file_paths)
-        # value 값들로 바꿔 줘 model_dump 는 list 랑같음, exclude_unset=True 이거는 변경된 필드만 반영 한다는것
-    )
-    await db.commit()  # 트랜잭션 커밋
-    await db.refresh(ship)  # 갱신/재조회
-    return ship  # 수정된 ship 반환
+                file_paths.append(save_path)  # 저장된 경로를 DB 저장용 리스트에 추가
+                saved_paths.append(save_path)  # 롤백을 위해 따로 기록해둠
+
+        await db.execute(  # DB에서 UPDATE 쿼리 실행 (비동기 방식)
+            update(shipments_models.Shipment)  # shipments 테이블을 대상으로 업데이트 수행
+            .where(shipments_models.Shipment.id == ship_id)  # 해당 ID의 행만 업데이트
+            .values(
+                **payload.model_dump(exclude_unset=True),  # title, description 중 변경된 값만 포함 (None은 제외)
+                file_paths=file_paths  # 파일 경로는 무조건 새 리스트로 덮어씀 (기존 파일 유지 + 새 파일 포함)
+            )
+        )
+
+        await db.commit()  # 트랜잭션 커밋 → 지금까지의 변경 사항을 실제 DB에 반영
+        await db.refresh(shipment)  # shipment 객체를 최신 상태로 다시 불러옴 (commit 후 갱신)
+        return shipment  # 최종적으로 수정된 게시글 데이터를 반환
+
+    except Exception as e:  # 파일 저장 or DB 작업 중 에러 발생 시
+        for path in saved_paths:  # 새로 저장했던 파일들 중
+            if os.path.exists(path):  # 존재하는 파일만
+                os.remove(path)  # 디스크에서 삭제 (롤백)
+
+        raise HTTPException(500, f"수정 중 오류 발생: {str(e)}")  # HTTP 500 에러와 함께 에러 메시지 반환
+
 
 
 # 게시글 삭제
-@router.delete('/shipments/{ship_id}', status_code=204)
+@router.delete('/shipments/{ship_id}', status_code=204)  # HTTP DELETE 요청을 처리하는 라우터 설정, /shipments/123 같은 URL을 의미하며 응답 상태 코드는 204(No Content)
 async def delete_shipment(
-        ship_id: int,
-        db: AsyncSession = Depends(database.get_db),
-        _: users_models.User = Depends(dependencies.admin_only),
+    ship_id: int,  # URL 경로에서 전달된 게시글 ID (정수형)
+    db: AsyncSession = Depends(database.get_db),  # DB 세션을 비동기로 의존성 주입 (get_db 함수로부터 AsyncSession 객체를 받아옴)
+    _: users_models.User = Depends(dependencies.admin_only),  # admin_only 의존성을 통해 관리자 권한 확인, '_'는 이 값을 사용하지 않겠다는 의미
 ):
-    await db.execute(delete(shipments_models.Shipment).where(shipments_models.Shipment.id == ship_id))  # 삭제 쿼리 실행
-    await db.commit()  # 실제 DB 반영
+    shipment = await db.get(shipments_models.Shipment, ship_id)  # DB에서 Shipment 테이블의 기본키가 ship_id인 레코드를 조회함 (없으면 None 반환)
+
+    if not shipment:  # shipment가 None이면 → 존재하지 않는 게시글
+        raise HTTPException(404, "Shipment not found")  # HTTP 404 에러 발생 (게시글을 찾을 수 없음)
+
+    # 파일 삭제
+    for path in shipment.file_paths or []:  # 게시글에 연결된 파일 경로들 반복 (file_paths가 None이면 빈 리스트로 대체)
+        if os.path.exists(path):  # 서버 파일 시스템에 해당 경로의 파일이 실제로 존재하는지 확인
+            os.remove(path)  # 해당 경로의 파일을 실제로 삭제 (os.remove는 물리적으로 영구 삭제함)
+
+    # DB 행 삭제
+    await db.execute(  # 비동기 DB 세션에서 SQL 실행
+        delete(shipments_models.Shipment)  # SQL DELETE 구문 생성: DELETE FROM shipments
+        .where(shipments_models.Shipment.id == ship_id)  # 조건절: WHERE id = ship_id
+    )
+    await db.commit()  # 트랜잭션 커밋 → 실제로 DB에서 삭제가 반영됨
+
+
+
+
 
 
 # 파일 다운로드
@@ -251,11 +276,11 @@ async def download_file(
 
     # 인덱스 범위 확인
     try:
-        file_path_str = shipment.file_path[file_index]  # 인덱스에 해당하는 파일 경로 추출
+        file_path_str = shipment.file_paths[file_index]  # 인덱스에 해당하는 파일 경로 추출
         if not file_path_str:  # 빈 문자열 체크
             raise HTTPException(status_code=404, detail='File not found')
     except IndexError:
-        raise HTTPException(status_code=404, detail='File index out of range')
+        raise HTTPException(status_code=404, detail='파일 인덱스가 파일리스트 길이를 벗어남')
 
     # 파일 존재 여부 확인
     file_path = Path(file_path_str)  # 문자열을 Path 객체로 변환

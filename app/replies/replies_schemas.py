@@ -1,3 +1,4 @@
+from app.posts import shipments_schemas
 from app.users import users_schemas
 
 
@@ -23,6 +24,7 @@ class ReplyOut(ReplyBase):
     description:str
     created_at: datetime
     creator: users_schemas.UserOut
+    shipments:shipments_schemas.ShipmentOut
 
 
 class ReplyOutPageOut(BaseModel):
