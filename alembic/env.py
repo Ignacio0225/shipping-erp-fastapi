@@ -19,6 +19,8 @@ from app.database import Base          # ↙ 모델들이 Base 상속
 from app.users import users_models               # noqa: F401 (import 해야 메타데이터에 등록됨)
 from app.posts import shipments_models           # noqa: F401 (import 해야 메타데이터에 등록됨)
 from app.replies import replies_models           # noqa: F401 (import 해야 메타데이터에 등록됨)
+from app.type_categories import type_categories_models     # noqa: F401 (import 해야 메타데이터에 등록됨)
+from app.region_categories import region_categories_models     # noqa: F401 (import 해야 메타데이터에 등록됨)
 
 target_metadata = Base.metadata
 

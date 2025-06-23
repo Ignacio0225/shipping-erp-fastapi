@@ -1,6 +1,7 @@
 # app/posts/shipments_schemas.py
 # API 요청과 응답에 사용될 Pydantic 모델을 정의하는 파일
-
+from app.region_categories import region_categories_schemas
+from app.type_categories import type_categories_schemas
 from app.users import users_schemas
 
 
@@ -21,7 +22,7 @@ class ShipmentCreate(ShipmentBase):
 
 
 #put에 사용
-class ShipmentUpdate(BaseModel):
+class ShipmentUpdate(ShipmentBase):
     title: str | None
     description: str | None
 
@@ -34,6 +35,8 @@ class ShipmentOut(ShipmentBase):
     created_at:datetime
     updated_at:datetime
     creator:users_schemas.UserOut
+    type_category:type_categories_schemas.CategoryOut
+    region_category:region_categories_schemas.CategoryOut
 
     class Config:
         from_attributes = True

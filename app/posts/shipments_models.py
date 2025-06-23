@@ -15,6 +15,10 @@ class Shipment(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     title = Column(String(50), nullable=False) # nullable= required 같은거 빈칸 안됨
+    type_category_id = Column(Integer,ForeignKey('type_categories.id',ondelete='SET NULL'),nullable=True)
+    type_category = relationship('TypeCategory',backref=backref('shipments'),passive_deletes=True)
+    region_category_id = Column(Integer,ForeignKey('region_categories.id',ondelete='SET NULL'),nullable=True)
+    region_category = relationship('RegionCategory', backref=backref('shipments'), passive_deletes=True)
     description = Column(String, nullable=True)
     created_at = Column(DateTime,default=datetime.utcnow) # 세계 포준시로 표시함. 한국 표준시로 바꾸려면 프론트엔드에서 실행(UTC로 저장하고, 필요할 때 KST로 변환해서 사용하는 것이 안전.)
     updated_at = Column(DateTime,onupdate=datetime.utcnow) # 업데이트 시간 (로직에서 await db.commit() 시 자동적용)
