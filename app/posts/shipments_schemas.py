@@ -14,6 +14,8 @@ from datetime import datetime
 class ShipmentBase(BaseModel):
     title:str
     description:str
+    type_category_id:int
+    region_category_id:int
 
 
 #post에 사용
@@ -25,6 +27,8 @@ class ShipmentCreate(ShipmentBase):
 class ShipmentUpdate(ShipmentBase):
     title: str | None
     description: str | None
+    type_category_id: int | None
+    region_category_id: int | None
 
 
 
@@ -33,7 +37,7 @@ class ShipmentOut(ShipmentBase):
     id:int
     file_paths:list[str] | None
     created_at:datetime
-    updated_at:datetime
+    updated_at:datetime | None
     creator:users_schemas.UserOut
     type_category:type_categories_schemas.CategoryOut
     region_category:region_categories_schemas.CategoryOut

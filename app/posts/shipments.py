@@ -28,7 +28,7 @@ UPLOAD_DIR = 'public'  # 원하는 폴더로 변경 가능
 
 # 전체 포스트 리스트 조회 가능 (페이지네이션기능포함) (로그인된 모든 사용자)
 # 전체 포스트 리스트 조회 가능 (모든 게시글 한 번에 반환)
-@router.get('/shipments', response_model=shipments_schemas.ShipmentsPageOut,status_code=200)
+@router.get('/shipments', response_model=shipments_schemas.ShipmentsPageOut, status_code=200)
 async def list_shipment(
         page: int = 1,  # page 를 기본값을 1을줌
         size: int = 10,  # 리스트 사이즈를 10개를줌
@@ -71,7 +71,10 @@ async def list_shipment(
     ).offset(offset).limit(size)  # limit = size <-항상 요청한 페이지당 최대 개수만큼만 반환 사이즈는 무조건 10(게시글이 10개만나옴)
 
     base_query = base_query.options(
-        selectinload(shipments_models.Shipment.creator))  # 작성자 정보(creator)를 JOIN 해서 한 번에 가져오도록 설정
+        selectinload(shipments_models.Shipment.creator),
+        selectinload(shipments_models.Shipment.type_category),
+        selectinload(shipments_models.Shipment.region_category),
+    )  # 작성자 정보(creator), 카테고리 등을 JOIN 해서 한 번에 가져오도록 설정
 
     result = await db.execute(base_query)  # 쿼리 실행해서 결과 받아옴
 
@@ -86,6 +89,8 @@ async def list_shipment(
             updated_at=s.updated_at,
             type_category=s.type_category,
             region_category=s.region_category,
+            type_category_id=s.type_category_id,
+            region_category_id=s.region_category_id,
             file_paths=s.file_paths,
             creator=users_schemas.UserOut(
                 id=s.creator.id,
@@ -95,14 +100,14 @@ async def list_shipment(
             )
         )
         for s in shipments  # 모든 shipments(게시글) 객체를 Pydantic 스키마로 변환, 작성자 정보 포함
-    # squares = [x * x for x in range(5)] <- 리스트 내포 표현식
-    # 결과: [0, 1, 4, 9, 16]
+        # squares = [x * x for x in range(5)] <- 리스트 내포 표현식
+        # 결과: [0, 1, 4, 9, 16]
     ]
 
     # 검색 조건이 있으면 필터링된 총 개수를 가져옴
     if search:
         total_count_query = select(func.count()).where(
-            or_( # SQL or 을 쓰는 방법, 파이썬 or을 쓰면 True/False 로 반환 or_ = 둘중하나라도 있으면 이라는의미
+            or_(  # SQL or 을 쓰는 방법, 파이썬 or을 쓰면 True/False 로 반환 or_ = 둘중하나라도 있으면 이라는의미
                 shipments_models.Shipment.title.ilike(f"%{search}%"),
                 shipments_models.Shipment.description.ilike(f"%{search}%"),
                 func.array_to_string(shipments_models.Shipment.file_paths, ',').ilike(f"%{search}%")  # 배열검색 방법
@@ -123,13 +128,22 @@ async def list_shipment(
 
 
 # 하나의 포스트 조회
-@router.get('/shipments/{ship_id}', response_model=shipments_schemas.ShipmentOut,status_code=200)
+@router.get('/shipments/{ship_id}', response_model=shipments_schemas.ShipmentOut, status_code=200)
 async def get_shipment(
         ship_id: int,
         db: AsyncSession = Depends(database.get_db),
         _: users_models.User = Depends(dependencies.user_only)
 ):
-    res = await db.get(shipments_models.Shipment, ship_id)  # ship_id로 해당 게시글 단건 조회
+    base_query = select(shipments_models.Shipment)
+
+    result = await db.execute(
+        base_query.options(
+        selectinload(shipments_models.Shipment.creator),
+        selectinload(shipments_models.Shipment.type_category),
+        selectinload(shipments_models.Shipment.region_category),
+        ).where(shipments_models.Shipment.id == ship_id)
+    )  # ship_id로 해당 게시글 단건 조회
+    res = result.scalars().first()
     if not res:
         raise HTTPException(status_code=404, detail='shipment not found')  # 없는 경우 404 반환
     return res  # (여기선 작성자 정보까지 제대로 반환하려면 별도 selectinload 필요, 단건 상세라면 추가로 구현해도 됨)
@@ -140,11 +154,18 @@ async def get_shipment(
 async def create_shipment(
         title: str = Form(...),  # 파일 업로드 때문에 따로 Form 으로 설정 (multipart/form-data 형식, json 아님)
         description: str = Form(...),  # 파일 업로드 때문에 따로 Form 으로 설정 (multipart/form-data 형식, json 아님)
+        type_category_id: int = Form(...),
+        region_category_id:int = Form(...),
         files: list[UploadFile] = File(None),  # 파일이 없는 경우 대비. 기본값은 None입니다. 여러개 업로드
         db: AsyncSession = Depends(database.get_db),
         current_user: users_models.User = Depends(dependencies.staff_only),
 ):
-    payload = shipments_schemas.ShipmentCreate(title=title, description=description)  # 입력값을 Pydantic 모델로 생성
+    payload = shipments_schemas.ShipmentCreate(
+        title=title,
+        description=description,
+        type_category_id=type_category_id,
+        region_category_id=region_category_id
+    )  # 입력값을 Pydantic 모델로 생성
 
     file_paths = None  # 파일이 없을 때 None(Null)로 저장
 
@@ -157,31 +178,47 @@ async def create_shipment(
             os.makedirs(UPLOAD_DIR, exist_ok=True)  # `UPLOAD_DIR = public` 폴더가 없으면 자동으로 만들어 줍니다, 이미 존재하면 그냥 넘어감.
             saved_path = os.path.join(UPLOAD_DIR,f"{uuid.uuid4()}_{file.filename}")  # 실제 저장할 파일 경로 생성, 예: `UPLOAD_DIR = public/sample.pdf`, uuid로 unique 하게 만들어줌
             with open(saved_path, 'wb') as buffer:  # 파일 저장용 스트림 열기(열어야 내용물을 알수 있기 때문) (해당 파일을 buffer라고 부르기로 약속)
-                shutil.copyfileobj(file.file, buffer)  # 읽어놓은 파일을 통째로 복사해서 저장, `file.file`은 `SpooledTemporaryFile` 객체임 (stream 기반)
+                shutil.copyfileobj(file.file,buffer)  # 읽어놓은 파일을 통째로 복사해서 저장, `file.file`은 `SpooledTemporaryFile` 객체임 (stream 기반)
             new_file_paths.append(saved_path)  # 저장한 경로 리스트에 추가
         file_paths = new_file_paths  # 최종 저장 경로 리스트로 교체
 
     new_ship = shipments_models.Shipment(
-        **payload.model_dump(exclude={'file_paths'}),  # - title / description  model_dump()는 받아온 title과 description을 각각의 객체로 나눠줌. exclude 여기서 사실 안해도됨 어짜피 filepath 가 payload에 포함 안돼있음
+        **payload.model_dump(exclude={'file_paths'}),
+        # - title / description  model_dump()는 받아온 title과 description을 각각의 객체로 나눠줌. exclude 여기서 사실 안해도됨 어짜피 filepath 가 payload에 포함 안돼있음
         file_paths=file_paths,
         creator_id=current_user.id  # - 작성자의 Foreignkey
     )
+
     db.add(new_ship)  # INSERT 준비
     await db.commit()  # 트랜잭션 커밋(비동기 await)
     await db.refresh(new_ship)  # DB가 채워진 PK.시간 재조회
-    return new_ship  # JSON 직렬화 -> 응답
+    # 관계필드까지 모두 미리 조회해서 응답으로 반환
+    result = await db.execute(
+        select(shipments_models.Shipment)
+        .options(
+            selectinload(shipments_models.Shipment.creator),  # 작성자 정보
+            selectinload(shipments_models.Shipment.type_category),  # 카테고리 관계
+            selectinload(shipments_models.Shipment.region_category),  # 지역 관계
+        )
+        .where(shipments_models.Shipment.id == new_ship.id)
+    )
+    ship_with_relations = result.scalar_one()
+
+    return ship_with_relations # JSON 직렬화 -> 응답
+
 
 
 # 게시글 수정 (작성자 또는 staff만 가능)
-@router.put('/shipments/{ship_id}', response_model=shipments_schemas.ShipmentOut,status_code=200)  # PUT 요청 시 이 함수 실행, 수정 후 반환 타입은 ShipmentOut 스키마
+@router.put('/shipments/{ship_id}', response_model=shipments_schemas.ShipmentOut,
+            status_code=200)  # PUT 요청 시 이 함수 실행, 수정 후 반환 타입은 ShipmentOut 스키마
 async def update_shipment(
-    ship_id: int,  # URL 경로에서 전달받은 게시글 ID (정수형)
-    title: str = Form(None),  # form-data로 전달된 title 값, 없으면 None (수정 안 했다는 뜻)
-    description: str = Form(None),  # form-data로 전달된 description 값, 없으면 None
-    keep_file_paths: list[str] = Form(None),  # 기존 파일 중 유지하고 싶은 파일 경로 리스트 (없으면 전부 삭제로 처리됨)
-    new_file_paths: list[UploadFile] = File(None),  # 새로 업로드된 파일들 (없을 수도 있음)
-    db: AsyncSession = Depends(database.get_db),  # 비동기 DB 세션을 의존성으로 주입받음 (get_db 함수에서 생성됨)
-    current_user: users_models.User = Depends(dependencies.staff_only),  # 로그인한 사용자가 staff 권한인지 검사 (아니면 403 에러)
+        ship_id: int,  # URL 경로에서 전달받은 게시글 ID (정수형)
+        title: str = Form(None),  # form-data로 전달된 title 값, 없으면 None (수정 안 했다는 뜻)
+        description: str = Form(None),  # form-data로 전달된 description 값, 없으면 None
+        keep_file_paths: list[str] = Form(None),  # 기존 파일 중 유지하고 싶은 파일 경로 리스트 (없으면 전부 삭제로 처리됨)
+        new_file_paths: list[UploadFile] = File(None),  # 새로 업로드된 파일들 (없을 수도 있음)
+        db: AsyncSession = Depends(database.get_db),  # 비동기 DB 세션을 의존성으로 주입받음 (get_db 함수에서 생성됨)
+        current_user: users_models.User = Depends(dependencies.staff_only),  # 로그인한 사용자가 staff 권한인지 검사 (아니면 403 에러)
 ):
     shipment = await db.get(shipments_models.Shipment, ship_id)  # DB에서 Shipment 테이블에서 해당 ID의 게시글 1개 조회 (없으면 None 반환)
     if not shipment:  # 조회 결과가 없다면
@@ -190,8 +227,7 @@ async def update_shipment(
     if shipment.creator_id != current_user.id:
         raise HTTPException(status_code=403, detail="작성자만 수정할 수 있습니다.")
 
-
-    payload = shipments_schemas.ShipmentUpdate(title=title, description=description)  # 수정할 데이터(title, description)를 Pydantic 모델로 감쌈 (None 값 포함 가능)
+    payload = shipments_schemas.ShipmentUpdate(title=title,description=description)  # 수정할 데이터(title, description)를 Pydantic 모델로 감쌈 (None 값 포함 가능)
 
     existing_paths = set(shipment.file_paths or [])  # 기존에 저장된 파일 경로 리스트를 집합(set)으로 변환 (없을 경우 빈 집합)
     keep_paths = set(keep_file_paths or [])  # 프론트엔드에서 전달받은 유지할 파일 경로 리스트를 집합으로 변환 (없으면 빈 집합)
@@ -238,15 +274,16 @@ async def update_shipment(
         raise HTTPException(500, f"수정 중 오류 발생: {str(e)}")  # HTTP 500 에러와 함께 에러 메시지 반환
 
 
-
 # 게시글 삭제
-@router.delete('/shipments/{ship_id}', status_code=204)  # HTTP DELETE 요청을 처리하는 라우터 설정, /shipments/123 같은 URL을 의미하며 응답 상태 코드는 204(No Content)
+@router.delete('/shipments/{ship_id}',status_code=204)  # HTTP DELETE 요청을 처리하는 라우터 설정, /shipments/123 같은 URL을 의미하며 응답 상태 코드는 204(No Content)
 async def delete_shipment(
-    ship_id: int,  # URL 경로에서 전달된 게시글 ID (정수형)
-    db: AsyncSession = Depends(database.get_db),  # DB 세션을 비동기로 의존성 주입 (get_db 함수로부터 AsyncSession 객체를 받아옴)
-    current_user: users_models.User = Depends(dependencies.admin_only),  # admin_only 의존성을 통해 관리자 권한 확인, '_'는 이 값을 사용하지 않겠다는 의미
+        ship_id: int,  # URL 경로에서 전달된 게시글 ID (정수형)
+        db: AsyncSession = Depends(database.get_db),  # DB 세션을 비동기로 의존성 주입 (get_db 함수로부터 AsyncSession 객체를 받아옴)
+        current_user: users_models.User = Depends(dependencies.admin_only),
+        # admin_only 의존성을 통해 관리자 권한 확인, '_'는 이 값을 사용하지 않겠다는 의미
 ):
-    shipment = await db.get(shipments_models.Shipment, ship_id)  # DB에서 Shipment 테이블의 기본키가 ship_id인 레코드를 조회함 (없으면 None 반환)
+    shipment = await db.get(shipments_models.Shipment,
+                            ship_id)  # DB에서 Shipment 테이블의 기본키가 ship_id인 레코드를 조회함 (없으면 None 반환)
 
     if not shipment:  # shipment가 None이면 → 존재하지 않는 게시글
         raise HTTPException(404, "Shipment not found")  # HTTP 404 에러 발생 (게시글을 찾을 수 없음)
@@ -265,10 +302,6 @@ async def delete_shipment(
         .where(shipments_models.Shipment.id == ship_id)  # 조건절: WHERE id = ship_id
     )
     await db.commit()  # 트랜잭션 커밋 → 실제로 DB에서 삭제가 반영됨
-
-
-
-
 
 
 # 파일 다운로드
