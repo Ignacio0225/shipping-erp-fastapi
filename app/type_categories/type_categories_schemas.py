@@ -15,6 +15,7 @@ class CategoryCreate(CategoryBase):
 
 class CategoryOut(CategoryBase):
     id:int
+    title:str
     creator: users_schemas.UserOut
     class Config:
         from_attributes = True

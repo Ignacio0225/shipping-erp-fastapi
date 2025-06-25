@@ -14,9 +14,6 @@ from datetime import datetime
 class ShipmentBase(BaseModel):
     title:str
     description:str
-    type_category_id:int
-    region_category_id:int
-
 
 #post에 사용
 class ShipmentCreate(ShipmentBase):
@@ -27,9 +24,8 @@ class ShipmentCreate(ShipmentBase):
 class ShipmentUpdate(ShipmentBase):
     title: str | None
     description: str | None
-    type_category_id: int | None
-    region_category_id: int | None
-
+    type_category_id:int |None
+    region_category_id:int |None
 
 
 #데이터를 받아올때 유효성검사를 위한 모델에 사용 (파일 패스가 리스트기때문에)

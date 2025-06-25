@@ -12,6 +12,8 @@ from sqlalchemy.ext.asyncio import AsyncSession  # 비동기 SQLAlchemy 세션
 from sqlalchemy import select, update, delete, func, or_  # SQL 쿼리 빌더, 함수, OR 검색 등
 from sqlalchemy.orm import selectinload  # 관계형 데이터 JOIN/프리패치용
 
+from app.region_categories import region_categories_schemas
+from app.type_categories import type_categories_schemas
 from app.users import users_models, users_schemas  # 사용자 ORM/스키마
 from app.posts import shipments_models  # 선적 ORM 및 Shipment 엔티티
 from app.posts import shipments_schemas  # 선적 스키마
@@ -87,16 +89,22 @@ async def list_shipment(
             description=s.description,
             created_at=s.created_at,
             updated_at=s.updated_at,
-            type_category=s.type_category,
-            region_category=s.region_category,
-            type_category_id=s.type_category_id,
-            region_category_id=s.region_category_id,
+            type_category=type_categories_schemas.CategoryOut(
+                id=s.id,
+                title=s.title,
+                creator=s.creator,
+            ),
+            region_category=region_categories_schemas.CategoryOut(
+                id=s.id,
+                title=s.title,
+                creator=s.creator,
+            ),
             file_paths=s.file_paths,
             creator=users_schemas.UserOut(
                 id=s.creator.id,
                 email=s.creator.email,
                 role=s.creator.role,
-                username=s.creator.username
+                username=s.creator.username,
             )
         )
         for s in shipments  # 모든 shipments(게시글) 객체를 Pydantic 스키마로 변환, 작성자 정보 포함
@@ -154,8 +162,8 @@ async def get_shipment(
 async def create_shipment(
         title: str = Form(...),  # 파일 업로드 때문에 따로 Form 으로 설정 (multipart/form-data 형식, json 아님)
         description: str = Form(...),  # 파일 업로드 때문에 따로 Form 으로 설정 (multipart/form-data 형식, json 아님)
-        type_category_id: int = Form(...),
-        region_category_id:int = Form(...),
+        type_category: int = Form(...),
+        region_category:int = Form(...),
         files: list[UploadFile] = File(None),  # 파일이 없는 경우 대비. 기본값은 None입니다. 여러개 업로드
         db: AsyncSession = Depends(database.get_db),
         current_user: users_models.User = Depends(dependencies.staff_only),
@@ -163,8 +171,6 @@ async def create_shipment(
     payload = shipments_schemas.ShipmentCreate(
         title=title,
         description=description,
-        type_category_id=type_category_id,
-        region_category_id=region_category_id
     )  # 입력값을 Pydantic 모델로 생성
 
     file_paths = None  # 파일이 없을 때 None(Null)로 저장
@@ -186,13 +192,17 @@ async def create_shipment(
         **payload.model_dump(exclude={'file_paths'}),
         # - title / description  model_dump()는 받아온 title과 description을 각각의 객체로 나눠줌. exclude 여기서 사실 안해도됨 어짜피 filepath 가 payload에 포함 안돼있음
         file_paths=file_paths,
-        creator_id=current_user.id  # - 작성자의 Foreignkey
+        creator_id=current_user.id,  # - 작성자의 Foreignkey
+        type_category_id=type_category,
+        region_category_id=region_category,
     )
 
     db.add(new_ship)  # INSERT 준비
     await db.commit()  # 트랜잭션 커밋(비동기 await)
     await db.refresh(new_ship)  # DB가 채워진 PK.시간 재조회
     # 관계필드까지 모두 미리 조회해서 응답으로 반환
+
+    #  프론트에서 저장후 바로 상세페이지(get)로 리다이렉트 되는데 그곳에서 get이 get에 있는 selectinload 보다 get을 먼저 실행하게되서 오류가남 (트랜잭션이 물리적으로 완전히 반영되기 전에 GET이 먼저 실행)
     result = await db.execute(
         select(shipments_models.Shipment)
         .options(
@@ -215,6 +225,8 @@ async def update_shipment(
         ship_id: int,  # URL 경로에서 전달받은 게시글 ID (정수형)
         title: str = Form(None),  # form-data로 전달된 title 값, 없으면 None (수정 안 했다는 뜻)
         description: str = Form(None),  # form-data로 전달된 description 값, 없으면 None
+        type_category: int = Form(None),
+        region_category:int = Form(None),
         keep_file_paths: list[str] = Form(None),  # 기존 파일 중 유지하고 싶은 파일 경로 리스트 (없으면 전부 삭제로 처리됨)
         new_file_paths: list[UploadFile] = File(None),  # 새로 업로드된 파일들 (없을 수도 있음)
         db: AsyncSession = Depends(database.get_db),  # 비동기 DB 세션을 의존성으로 주입받음 (get_db 함수에서 생성됨)
@@ -227,7 +239,12 @@ async def update_shipment(
     if shipment.creator_id != current_user.id:
         raise HTTPException(status_code=403, detail="작성자만 수정할 수 있습니다.")
 
-    payload = shipments_schemas.ShipmentUpdate(title=title,description=description)  # 수정할 데이터(title, description)를 Pydantic 모델로 감쌈 (None 값 포함 가능)
+    payload = shipments_schemas.ShipmentUpdate(
+        title=title,
+        description=description,
+        type_category_id=type_category,
+        region_category_id=region_category,
+    )  # 수정할 데이터(title, description)를 Pydantic 모델로 감쌈 (None 값 포함 가능)
 
     existing_paths = set(shipment.file_paths or [])  # 기존에 저장된 파일 경로 리스트를 집합(set)으로 변환 (없을 경우 빈 집합)
     keep_paths = set(keep_file_paths or [])  # 프론트엔드에서 전달받은 유지할 파일 경로 리스트를 집합으로 변환 (없으면 빈 집합)
@@ -258,13 +275,23 @@ async def update_shipment(
             .where(shipments_models.Shipment.id == ship_id)  # 해당 ID의 행만 업데이트
             .values(
                 **payload.model_dump(exclude_unset=True),  # title, description 중 변경된 값만 포함 (None은 제외)
-                file_paths=file_paths  # 파일 경로는 무조건 새 리스트로 덮어씀 (기존 파일 유지 + 새 파일 포함)
+                file_paths=file_paths,  # 파일 경로는 무조건 새 리스트로 덮어씀 (기존 파일 유지 + 새 파일 포함)
             )
         )
-
         await db.commit()  # 트랜잭션 커밋 → 지금까지의 변경 사항을 실제 DB에 반영
         await db.refresh(shipment)  # shipment 객체를 최신 상태로 다시 불러옴 (commit 후 갱신)
-        return shipment  # 최종적으로 수정된 게시글 데이터를 반환
+
+        put_result = await db.execute(
+            select(shipments_models.Shipment)
+            .options(
+                selectinload(shipments_models.Shipment.creator),
+                selectinload(shipments_models.Shipment.type_category),
+                selectinload(shipments_models.Shipment.region_category),
+            )
+            .where(shipments_models.Shipment.id == shipment.id)
+        )
+        ship_with_relations_put = put_result.scalar_one()
+        return ship_with_relations_put  # 최종적으로 수정된 게시글 데이터를 반환
 
     except Exception as e:  # 파일 저장 or DB 작업 중 에러 발생 시
         for path in saved_paths:  # 새로 저장했던 파일들 중
