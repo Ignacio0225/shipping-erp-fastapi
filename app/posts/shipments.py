@@ -5,15 +5,14 @@ import uuid  # 파일명 유니크하게 할 때 사용하는 UUID 생성기
 
 from typing import Optional  # 파라미터/타입 어노테이션에 Optional 사용
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, responses, \
-    Query  # FastAPI 관련 각종 import (의존성, 파일업로드, 예외처리, 응답 등)
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, responses  # FastAPI 관련 각종 import (의존성, 파일업로드, 예외처리, 응답 등)
 from pathlib import Path  # 파일 경로 객체로 변환, exists 체크용
 from sqlalchemy.ext.asyncio import AsyncSession  # 비동기 SQLAlchemy 세션
 from sqlalchemy import select, update, delete, func, or_  # SQL 쿼리 빌더, 함수, OR 검색 등
 from sqlalchemy.orm import selectinload  # 관계형 데이터 JOIN/프리패치용
 
-from app.region_categories import region_categories_schemas
-from app.type_categories import type_categories_schemas
+from app.categories.region_categories import region_categories_schemas
+from app.categories.type_categories import type_categories_schemas
 from app.users import users_models, users_schemas  # 사용자 ORM/스키마
 from app.posts import shipments_models  # 선적 ORM 및 Shipment 엔티티
 from app.posts import shipments_schemas  # 선적 스키마
@@ -34,6 +33,8 @@ UPLOAD_DIR = 'public'  # 원하는 폴더로 변경 가능
 async def list_shipment(
         page: int = 1,  # page 를 기본값을 1을줌
         size: int = 10,  # 리스트 사이즈를 10개를줌
+        type_category:int = None,
+        region_category:int = None,
         search: Optional[str] = None,
         db: AsyncSession = Depends(database.get_db),
         _: users_models.User = Depends(dependencies.user_only)  # 로그인 확인
@@ -56,6 +57,14 @@ async def list_shipment(
 
     base_query = select(shipments_models.Shipment)  # 선적(게시글) 전체 SELECT 쿼리 생성
 
+    if type_category:
+        base_query = base_query.where(shipments_models.Shipment.type_category_id == type_category
+        )
+
+    if region_category:
+        base_query = base_query.where(shipments_models.Shipment.region_category_id == region_category
+        )
+
     # 검색어 있을 때만 필터링
     if search:  # 프론트엔드 파라미터에서 search 한 문자열을 받아옴
         # 제목 또는 설명에 검색어 포함된 데이터만!
@@ -72,6 +81,7 @@ async def list_shipment(
         shipments_models.Shipment.created_at.desc()
     ).offset(offset).limit(size)  # limit = size <-항상 요청한 페이지당 최대 개수만큼만 반환 사이즈는 무조건 10(게시글이 10개만나옴)
 
+    # 관계(relationship) 이 있는 db를 불러오기 위함 shipment가 아닌 creator,category 이런데서
     base_query = base_query.options(
         selectinload(shipments_models.Shipment.creator),
         selectinload(shipments_models.Shipment.type_category),
@@ -90,14 +100,14 @@ async def list_shipment(
             created_at=s.created_at,
             updated_at=s.updated_at,
             type_category=type_categories_schemas.CategoryOut(
-                id=s.id,
-                title=s.title,
-                creator=s.creator,
+                id=s.type_category.id,
+                title=s.type_category.title,
+                creator=s.type_category.creator,
             ),
             region_category=region_categories_schemas.CategoryOut(
-                id=s.id,
-                title=s.title,
-                creator=s.creator,
+                id=s.region_category.id,
+                title=s.region_category.title,
+                creator=s.region_category.creator,
             ),
             file_paths=s.file_paths,
             creator=users_schemas.UserOut(

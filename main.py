@@ -9,8 +9,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.users.auth import router as auth_router
 from app.users.protected import router as protected_router
 from app.posts.shipments import router as shipment_router
-from app.region_categories.region_categories import router as region_category_router
-from app.type_categories.type_categories import router as type_category_router
+from app.categories.region_categories.region_categories import router as region_category_router
+from app.categories.type_categories.type_categories import router as type_category_router
 
 # 아래 코드: models.py의 모든 모델을 실제 DB 테이블로 생성 / 비동기에선 쓰지 않음
 # models.Base.metadata.create_all(bind=engine)

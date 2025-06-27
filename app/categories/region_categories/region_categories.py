@@ -4,7 +4,8 @@ from sqlalchemy import select, delete
 from typing import List
 
 from app import database
-from app.region_categories import region_categories_schemas, region_categories_models
+from app.categories.region_categories import region_categories_models
+from app.categories.region_categories import region_categories_schemas
 from app.users import users_models
 from app.users import dependencies
 
@@ -14,7 +15,7 @@ router = APIRouter(
 )
 
 
-@router.get('/region', response_model=List[region_categories_schemas.CategoryOut],status_code=200)
+@router.get('/region', response_model=List[region_categories_schemas.CategoryOut], status_code=200)
 async def list_region_categories(
         db: AsyncSession = Depends(database.get_db),
         _: users_models.User = Depends(dependencies.admin_only),
@@ -25,14 +26,14 @@ async def list_region_categories(
     return region_categories
 
 
-@router.post('/region', response_model=List[region_categories_schemas.CategoryOut],status_code=201)
+@router.post('/region', response_model=List[region_categories_schemas.CategoryOut], status_code=201)
 async def create_region_categories(
         payload: region_categories_schemas.CategoryCreate,
         db: AsyncSession = Depends(database.get_db),
         current_user: users_models.User = Depends(dependencies.admin_only),
 ):
     # Pydantic 객체를 unpack해서 모델 인스턴스 생성
-    new_region_category = region_categories_models.RegionCategory(**payload.model_dump(),creator_id=current_user.id)
+    new_region_category = region_categories_models.RegionCategory(**payload.model_dump(), creator_id=current_user.id)
 
     db.add(new_region_category)
     await db.commit()
@@ -46,7 +47,7 @@ async def delete_region_categories(
         db: AsyncSession = Depends(database.get_db),
         current_user : users_models.User = Depends(dependencies.admin_only),
 ):
-    region_category_id = await db.get(region_categories_models.RegionCategory,region_category_id)
+    region_category_id = await db.get(region_categories_models.RegionCategory, region_category_id)
 
     if not region_category_id:
         raise HTTPException(404,'Region Category not found')
@@ -55,6 +56,6 @@ async def delete_region_categories(
         raise HTTPException(status_code=403,detail='작성자만 삭제할 수 있습니다.')
     await db.execute(
         delete(region_categories_models.RegionCategory)
-        .where(region_categories_models.RegionCategory.id == region_category_id )
+        .where(region_categories_models.RegionCategory.id == region_category_id)
     )
     await db.commit()
