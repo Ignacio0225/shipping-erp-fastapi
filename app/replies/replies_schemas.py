@@ -21,13 +21,14 @@ class ReplyUpdate(BaseModel):
 
 class ReplyOut(ReplyBase):
     id: int
-    description:str
+    description:str | None
     created_at: datetime
+    updated_at: datetime |None
     creator: users_schemas.UserOut
-    shipments:shipments_schemas.ShipmentOut
+    shipments:shipments_schemas.SimpleShipmentOut
 
 
-class ReplyOutPageOut(BaseModel):
+class ReplyPageOut(BaseModel):
     items: List[ReplyOut]
     total: int
     page: int

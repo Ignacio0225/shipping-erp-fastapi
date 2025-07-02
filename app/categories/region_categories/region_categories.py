@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 from sqlalchemy import select, delete
 from typing import List
 
@@ -18,9 +19,13 @@ router = APIRouter(
 @router.get('/region', response_model=List[region_categories_schemas.CategoryOut], status_code=200)
 async def list_region_categories(
         db: AsyncSession = Depends(database.get_db),
-        _: users_models.User = Depends(dependencies.admin_only),
+        _: users_models.User = Depends(dependencies.user_only),
 ):
     base_query = select(region_categories_models.RegionCategory)
+    base_query = base_query.options(
+        selectinload(region_categories_models.RegionCategory.creator),
+    )
+
     result = await db.execute(base_query)
     region_categories = result.scalars().all()
     return region_categories
@@ -37,8 +42,16 @@ async def create_region_categories(
 
     db.add(new_region_category)
     await db.commit()
-    await db.refresh(new_region_category)
-    return new_region_category
+    result = await db.execute(
+        select(region_categories_models.RegionCategory)
+        .options(
+            selectinload(region_categories_models.RegionCategory.creator),  # 작성자 정보  # 지역 관계
+        )
+    )
+    region_category_relations = result.scalar_one()
+
+    return region_category_relations  # JSON 직렬화 -> 응답
+
 
 
 @router.delete('/region/{region_category_id}', status_code=204)

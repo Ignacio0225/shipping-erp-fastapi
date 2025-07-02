@@ -2,6 +2,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete
+from sqlalchemy.orm import selectinload
 from typing import List
 
 from app import database
@@ -18,9 +19,12 @@ router = APIRouter(
 @router.get('/type', response_model=List[type_categories_schemas.CategoryOut], status_code=200)
 async def list_type_categories(
         db: AsyncSession = Depends(database.get_db),
-        _: users_models.User = Depends(dependencies.admin_only),
+        _: users_models.User = Depends(dependencies.user_only),
 ):
     base_query = select(type_categories_models.TypeCategory)
+    base_query = base_query.options(
+        selectinload(type_categories_models.TypeCategory.creator),
+    )
     result = await db.execute(base_query)
     type_categories = result.scalars().all()
     return type_categories
@@ -37,8 +41,15 @@ async def create_type_categories(
 
     db.add(new_type_category)
     await db.commit()
-    await db.refresh(new_type_category)
-    return new_type_category
+    result = await db.execute(
+        select(type_categories_models.TypeCategory)
+        .options(
+            selectinload(type_categories_models.TypeCategory.creator),  # 작성자 정보  # 지역 관계
+        )
+    )
+    type_category_relations = result.scalar_one()
+
+    return type_category_relations # JSON 직렬화 -> 응답
 
 
 @router.delete('/type/{type_category_id}', status_code=204)
