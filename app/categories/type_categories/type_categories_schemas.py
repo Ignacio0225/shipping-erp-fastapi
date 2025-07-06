@@ -1,4 +1,4 @@
-# app/type_categories/type_categories_schemas.py
+# app/categories/type_categories/type_categories_schemas.py
 # API 요청과 응답에 사용될 Pydantic 모델을 정의하는 파일
 
 from pydantic import BaseModel

@@ -1,6 +1,8 @@
+# app/replies/replies_services.py
+
 import math
 
-from fastapi import Depends, HTTPException
+from fastapi import HTTPException
 
 from sqlalchemy.ext.asyncio import AsyncSession  # 비동기 SQLAlchemy 세션
 from sqlalchemy import select, update, delete, func, or_  # SQL 쿼리 빌더, 함수, OR 검색 등
@@ -11,6 +13,9 @@ from app.replies import replies_schemas, replies_models
 from app.users import users_models, dependencies
 
 
+ERROR_NOT_FOUND='댓글 찾을 수 없습니다. (404 Not Found)'
+ERROR_FORBIDDEN='작성자만 수정 및 삭제할 수 있습니다.'
+
 
 class RepliesServices:
 
@@ -19,7 +24,7 @@ class RepliesServices:
 
     async def list_replies(
             self,
-            ship_id: int,  # URL에서 ship_id를 가져옴
+            post_id: int,  # URL에서 ship_id를 가져옴
             page: int = 1,  # page 를 기본값을 1을줌
             size: int = 10,  # 리스트 사이즈를 10개를줌
     ):
@@ -40,7 +45,8 @@ class RepliesServices:
         # offset = 건너뛸 개수를 의미함 페이지가 2면 page -1  =  1 * 10 이니까 10번 전까지 건너뛰고 시작 한다는듯 (결국 시작 위치를 의미함)
 
         base_query = select(replies_models.Reply).where(
-            replies_models.Reply.shipment_id == ship_id)  # 선적(게시글) 전체 SELECT 쿼리 생성
+            replies_models.Reply.post_id == post_id)  # 선적(게시글) 전체 SELECT 쿼리 생성
+
 
         # 검색어 있을 때만 필터링
         # → 모든 게시글을 최신순으로 페이지네이션해서 반환
@@ -49,15 +55,18 @@ class RepliesServices:
             replies_models.Reply.created_at.desc()
         ).offset(offset).limit(size)  # limit = size <-항상 요청한 페이지당 최대 개수만큼만 반환 사이즈는 무조건 10(게시글이 10개만나옴)
 
-        # 관계(relationship) 이 있는 db를 불러오기 위함 shipment가 아닌 creator,category 이런데서
+        # 관계(relationship) 이 있는 db를 불러오기 위함 post가 아닌 creator,category 이런데서
         base_query = base_query.options(
             selectinload(replies_models.Reply.creator),
-            selectinload(replies_models.Reply.shipments),
+            selectinload(replies_models.Reply.posts),
         )  # 작성자 정보(creator), 카테고리 등을 JOIN 해서 한 번에 가져오도록 설정
 
         result = await self.db.execute(base_query)  # 쿼리 실행해서 결과 받아옴
 
         replies = result.scalars().all()  # 전체 레코드 가져오기
+
+        # if not replies:  프론트에서 해결하는게 더 좋음 이런 상황에서는 (댓글이 실제로 없을 수도 있으니까)
+        #     raise HTTPException(status_code=404,detail='댓글이 없습니다!')
 
         items = [
             replies_schemas.ReplyOut(
@@ -65,15 +74,15 @@ class RepliesServices:
                 description=s.description,
                 created_at=s.created_at,
                 updated_at=s.updated_at,
-                shipments=s.shipments,
+                posts=s.posts,
                 creator=s.creator,
             )
-            for s in replies  # 모든 shipments(게시글) 객체를 Pydantic 스키마로 변환, 작성자 정보 포함
+            for s in replies  # 모든 posts(게시글) 객체를 Pydantic 스키마로 변환, 작성자 정보 포함
             # squares = [x * x for x in range(5)] <- 리스트 내포 표현식
             # 결과: [0, 1, 4, 9, 16]
         ]
 
-        total_count_query = select(func.count()).where(replies_models.Reply.shipment_id == ship_id)
+        total_count_query = select(func.count()).where(replies_models.Reply.post_id == post_id)
         total_count = await self.db.scalar(total_count_query)  # 전체 게시글 개수 집계
 
         return {
@@ -88,16 +97,16 @@ class RepliesServices:
 
     async def create_reply(
             self,
-            ship_id: int,
             payload: replies_schemas.ReplyCreate,
-            current_user: users_models.User = Depends(dependencies.user_only),
+            current_user: users_models.User,
+            post_id: int,
     ):
 
         new_reply = replies_models.Reply(
             **payload.model_dump(),
             # - title / description  model_dump()는 받아온 title과 description을 각각의 객체로 나눠줌. exclude 여기서 사실 안해도됨 어짜피 filepath 가 payload에 포함 안돼있음
             creator_id=current_user.id,  # - 작성자의 Foreignkey
-            shipment_id=ship_id,
+            post_id=post_id,
         )
 
         self.db.add(new_reply)  # INSERT 준비
@@ -110,7 +119,7 @@ class RepliesServices:
             select(replies_models.Reply)
             .options(
                 selectinload(replies_models.Reply.creator),  # 작성자 정보  # 지역 관계
-                selectinload(replies_models.Reply.shipments)
+                selectinload(replies_models.Reply.posts)
             )
             .where(replies_models.Reply.id == new_reply.id)
         )
@@ -123,16 +132,16 @@ class RepliesServices:
 
     async def update_reply(
             self,
-            reply_id: int,
             payload: replies_schemas.ReplyUpdate,
-            current_user: users_models.User = Depends(dependencies.user_only),
+            current_user: users_models.User,
+            reply_id: int,
     ):
 
         reply = await self.db.get(replies_models.Reply, reply_id)
         if not reply:
-            raise HTTPException(status_code=404, detail='Reply not found')
+            raise HTTPException(status_code=404, detail=ERROR_NOT_FOUND)
         if reply.creator_id != current_user.id:
-            raise HTTPException(status_code=403, detail="작성자만 수정할 수 있습니다.")
+            raise HTTPException(status_code=403, detail=ERROR_FORBIDDEN)
 
         await self.db.execute(
             update(replies_models.Reply)
@@ -151,7 +160,7 @@ class RepliesServices:
             select(replies_models.Reply)
             .options(
                 selectinload(replies_models.Reply.creator),  # 작성자 정보  # 지역 관계
-                selectinload(replies_models.Reply.shipments)
+                selectinload(replies_models.Reply.posts)
             )
             .where(replies_models.Reply.id == reply_id)
         )
@@ -161,8 +170,8 @@ class RepliesServices:
 
     async def delete_reply(
             self,
+            current_user: users_models.User,
             reply_id: int,
-            current_user: users_models.User = Depends(dependencies.user_only),
     ):
         reply = await self.db.get(replies_models.Reply, reply_id)
         if not reply:

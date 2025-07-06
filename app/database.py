@@ -4,7 +4,7 @@
 
 
 #                                       새로운 방식!!!!!!!!!!!
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 from sqlalchemy.orm import declarative_base
 
 DATABASE_URL = 'postgresql+asyncpg://yusunhyuk:tjsgur2399@localhost/shipping_erp_db'
@@ -24,7 +24,7 @@ Base = declarative_base()
 
 
 #                               과거방식 !!!!!!
-# from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession  # 비동기 엔진 및 세션
+# from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession # 비동기 엔진 및 세션
 # from sqlalchemy.orm import sessionmaker, declarative_base
 
 

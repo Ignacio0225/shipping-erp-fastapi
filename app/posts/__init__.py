@@ -1,2 +1,2 @@
 # app/posts/__init__.py
-from .shipments_models import Shipment
+from .posts_models import Post

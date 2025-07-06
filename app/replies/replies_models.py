@@ -2,7 +2,7 @@
 # DB에 저장될 사용자 정보를 정의하는 ORM 모델
 
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey
-from sqlalchemy.orm import relationship, backref
+from sqlalchemy.orm import relationship
 
 
 from datetime import datetime
@@ -21,8 +21,8 @@ class Reply(Base):
     creator_id = Column(Integer, ForeignKey('users.id',ondelete='SET NULL'),nullable=True) # 유저가 삭제되어도 replies가 남음 ondelete='SET NULL'을 추가하면 삭제된 유저의 아이디는 null로 표시됨, null 이 됐을때 오류 방지를 위해 nullable=True 를 써줌
     creator = relationship('User',back_populates='reply',passive_deletes=True) # passive_deletes 는 FK의 ondelete에 따름 (SET_NULL = 연결된 객체 삭제시 삭제 안되고 NULL이 됨)
 
-    shipment_id = Column(Integer, ForeignKey('shipments.id',ondelete='CASCADE')) #shipments table의 id 컬럼을 참조, CASCADE 게시글이 삭제되면 리플도 삭제
-    shipments = relationship('Shipment', back_populates='reply', passive_deletes=True) # passive_deletes 는 FK의 ondelete에 따름 (CASCADE = 연결된 객체 삭제시 같이 삭제됨)
+    post_id = Column(Integer, ForeignKey('posts.id',ondelete='CASCADE')) #posts table의 id 컬럼을 참조, CASCADE 게시글이 삭제되면 리플도 삭제
+    posts = relationship('Post', back_populates='reply', passive_deletes=True) # passive_deletes 는 FK의 ondelete에 따름 (CASCADE = 연결된 객체 삭제시 같이 삭제됨)
 
-    # creator_id = Column(Integer, ForeignKey('users.id',ondelete='CASCADE')) #users table의 id 컬럼을 참조, CASCADE 유저가 삭제되면 shipments도 삭제
+    # creator_id = Column(Integer, ForeignKey('users.id',ondelete='CASCADE')) #users table의 id 컬럼을 참조, CASCADE 유저가 삭제되면 posts도 삭제
     # creator = relationship('User',backref=backref('shipments',cascade='all, delete'),passive_deletes=True)  # creator는 create를 한 사람을 User 객체로 나타내고 user.shipmets를 통해 user 에서도 연결된 posts 를 가져올 수 있음 passive_deletes=True(user 삭제시 shipment 삭제를 DB에 위임)

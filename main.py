@@ -8,7 +8,9 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.users.auth import router as auth_router
 from app.users.protected import router as protected_router
-from app.posts.shipments import router as shipment_router
+from app.posts.posts import router as post_router
+from app.progress.progress import router as progress_router
+from app.progress_detail_roro.progress_detail_roro import router as progress_detail_router
 from app.replies.replies import router as reply_router
 from app.categories.region_categories.region_categories import router as region_category_router
 from app.categories.type_categories.type_categories import router as type_category_router
@@ -22,7 +24,10 @@ app = FastAPI()
 app.include_router(auth_router)
 app.include_router(protected_router)
 
-app.include_router(shipment_router)
+app.include_router(post_router)
+
+app.include_router(progress_router)
+app.include_router(progress_detail_router)
 
 app.include_router(reply_router)
 app.include_router(type_category_router)

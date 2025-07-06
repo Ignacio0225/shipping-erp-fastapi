@@ -1,4 +1,4 @@
-
+# app/replies/replies.py
 
 from fastapi import APIRouter, Depends
 
@@ -31,28 +31,28 @@ def get_services(db:AsyncSession =Depends(get_db)) -> RepliesServices:
     return RepliesServices(db)
 
 
-@router.get('/{ship_id}', response_model=replies_schemas.ReplyPageOut, status_code=200)
+@router.get('/{post_id}', response_model=replies_schemas.ReplyPageOut, status_code=200)
 async def list_replies(
-        ship_id: int,  # URL에서 ship_id를 가져옴
+        post_id: int,  # URL에서 post_id를 가져옴
         page: int = 1,  # page 를 기본값을 1을줌
         size: int = 10,  # 리스트 사이즈를 10개를줌
         _:users_models.User=Depends(dependencies.user_only),
         service: RepliesServices = Depends(get_services)
     ):
         return await service.list_replies(
-            ship_id=ship_id,
+            post_id=post_id,
             page=page,
             size=size,
         )
-@router.post('/{ship_id}', response_model=replies_schemas.ReplyOut, status_code=201)
+@router.post('/{post_id}', response_model=replies_schemas.ReplyOut, status_code=201)
 async def create_reply(
-        ship_id: int,
+        post_id: int,
         payload: replies_schemas.ReplyCreate,
         current_user: users_models.User = Depends(dependencies.user_only),
         service:RepliesServices=Depends(get_services)
     ):
         return await service.create_reply(
-            ship_id=ship_id,
+            post_id=post_id,
             payload=payload,
             current_user=current_user,
         )
@@ -74,7 +74,7 @@ async def delete_reply(
         current_user: users_models.User = Depends(dependencies.user_only),
         service:RepliesServices=Depends(get_services)
     ):
-        return await service.delete_reply(
+        await service.delete_reply(
             reply_id=reply_id,
             current_user=current_user,
         )

@@ -1,1 +1,4 @@
 Generic single-database configuration.
+# README.md 예시
+1. 운영 시 반드시 alembic.ini의 sqlalchemy.url을 +asyncpg 없이 'postgresql://' 형태로 맞춰주세요!
+2. env.py에서는 자동 변환되지만, 마이그레이션은 무조건 동기 드라이버(psycopg2) 기반임을 명확히 해주세요.

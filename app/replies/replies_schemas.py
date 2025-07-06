@@ -1,4 +1,6 @@
-from app.posts import shipments_schemas
+# app/replies/replies_schemas.py
+
+from app.posts import posts_schemas
 from app.users import users_schemas
 
 
@@ -16,8 +18,9 @@ class ReplyCreate(ReplyBase):
     pass
 
 #put에 사용
-class ReplyUpdate(BaseModel):
+class ReplyUpdate(ReplyBase):
     description:str | None
+
 
 class ReplyOut(ReplyBase):
     id: int
@@ -25,7 +28,7 @@ class ReplyOut(ReplyBase):
     created_at: datetime
     updated_at: datetime |None
     creator: users_schemas.UserOut
-    shipments:shipments_schemas.SimpleShipmentOut
+    posts:posts_schemas.SimplePostOut
 
 
 class ReplyPageOut(BaseModel):
