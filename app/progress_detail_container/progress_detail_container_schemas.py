@@ -1,4 +1,4 @@
-# app/progress_roro/progress_roro_schemas.py
+# app/progress_detail_container/progress_detail_container_schemas.py
 
 from datetime import datetime, date
 from typing import List
@@ -8,29 +8,29 @@ from pydantic import BaseModel,Field
 from app.users import users_schemas
 
 
-class ProgressDetailRoRoDetailBase(BaseModel):
+class ProgressDetailContainerDetailBase(BaseModel):
     MODEL: str | None
     CHASSISNo: str | None
     EL: bool | None
     HBL: str | None
 
 
-class ProgressDetailRoRoDetailCreate(ProgressDetailRoRoDetailBase):
+class ProgressDetailContainerDetailCreate(ProgressDetailContainerDetailBase):
     pass
 
 
-class ProgressDetailRoRoDetailUpdate(ProgressDetailRoRoDetailBase):
+class ProgressDetailContainerDetailUpdate(ProgressDetailContainerDetailBase):
     pass
 
 
-class ProgressDetailRoRoDetailOut(ProgressDetailRoRoDetailBase):
+class ProgressDetailContainerDetailOut(ProgressDetailContainerDetailBase):
     id: int
 
     class Config:
         from_attributes = True
 
 
-class ProgressDetailRoRoBase(BaseModel):
+class ProgressDetailContainerBase(BaseModel):
     BKNo: str | None = None
     LINE: List[str] | None = None
     VESSEL: List[str] | None = None
@@ -43,20 +43,11 @@ class ProgressDetailRoRoBase(BaseModel):
     ATD: date | None = None
     SHIPPER: str | None = None
     DESTINATION: str | None = None
-    SMALL: int | None = None
-    BUY_SMALL: int | None = None
-    S_SUV: int | None = None
-    BUY_S_SUV: int | None = None
-    SUV: int | None = None
-    BUY_SUV: int | None = None
-    RV_CARGO: int | None = None
-    BUY_RV_CARGO: int | None = None
-    SPECIAL: int | None = None
-    BUY_SPECIAL: int | None = None
-    CBM: float | None = None
-    BUY_CBM: float | None = None
+    BUY:int | None =None
     SELL: int | None = None
-    HC: int | None = None
+    SHORING:int | None = None
+    TRUCKING:int | None = None
+    THC: int | None = None
     WFG: int | None = None
     SECURITY: int | None = None
     CARRIER: int | None = None
@@ -66,23 +57,23 @@ class ProgressDetailRoRoBase(BaseModel):
     PROFIT_USD: float | None = None
     PROFIT_KRW: float | None = None
     SALESMAN:str|None=None
-    progress_detail_roro_detail: List[ProgressDetailRoRoDetailCreate] = Field(default_factory=list)
+    progress_detail_container_detail: List[ProgressDetailContainerDetailCreate] = Field(default_factory=list)
 
 
-class ProgressDetailRoRoCreate(ProgressDetailRoRoBase):
+class ProgressDetailContainerCreate(ProgressDetailContainerBase):
     pass
 
 
-class ProgressDetailRoRoUpdate(ProgressDetailRoRoBase):
+class ProgressDetailContainerUpdate(ProgressDetailContainerBase):
     pass
 
 
-class ProgressDetailRoRoOut(ProgressDetailRoRoBase):
+class ProgressDetailContainerOut(ProgressDetailContainerBase):
     id: int
     created_at: datetime
     updated_at: datetime | None
     creator: users_schemas.UserOut
-    progress_detail_roro_detail: List[ProgressDetailRoRoDetailOut] = Field(default_factory=list)
+    progress_detail_container_detail: List[ProgressDetailContainerDetailOut] = Field(default_factory=list)
 
     class Config:
         from_attributes = True

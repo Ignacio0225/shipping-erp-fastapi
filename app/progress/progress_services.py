@@ -5,6 +5,7 @@ from sqlalchemy import select, delete, update
 from sqlalchemy.orm import selectinload
 
 from app.progress import progress_models, progress_schemas
+from app.progress_detail_container import progress_detail_container_models
 from app.progress_detail_roro import progress_detail_roro_models
 from app.users import users_models
 
@@ -25,12 +26,18 @@ class ProgressServices:
             .options(
                 selectinload(progress_models.Progress.creator),
                 selectinload(progress_models.Progress.post),
-                selectinload(progress_models.Progress.progress_detail_roro).selectinload(
-                    progress_detail_roro_models.ProgressRoRo.progress_detail_roro_detail),
+                selectinload(progress_models.Progress.progress_detail_roro)
+                .selectinload(progress_detail_roro_models.ProgressRoRo.progress_detail_roro_detail),
+                selectinload(progress_models.Progress.progress_detail_container)
+                .selectinload(progress_detail_container_models.ProgressContainer.progress_detail_container_detail),
             )
         )
         result = await self.db.execute(base_query)
         progress = result.scalar_one_or_none()
+
+        if not progress:
+            raise HTTPException(status_code=404, detail="Progress not found")
+
         return progress
 
     async def create_progress(
@@ -40,11 +47,11 @@ class ProgressServices:
             post_id: int,
     ):
         new_progress = progress_models.Progress(
-            payload.model_dump(
+            **payload.model_dump(
                 exclude_unset=True,
             ),
-            creator_id=current_user.id,
             post_id=post_id,
+            creator_id=current_user.id,
         )
         self.db.add(new_progress)
         await self.db.commit()
@@ -57,6 +64,8 @@ class ProgressServices:
                 selectinload(progress_models.Progress.post),
                 selectinload(progress_models.Progress.progress_detail_roro)
                 .selectinload(progress_detail_roro_models.ProgressRoRo.progress_detail_roro_detail),
+                selectinload(progress_models.Progress.progress_detail_container)
+                .selectinload(progress_detail_container_models.ProgressContainer.progress_detail_container_detail),
             )
         )
 
@@ -95,6 +104,8 @@ class ProgressServices:
                 selectinload(progress_models.Progress.post),
                 selectinload(progress_models.Progress.progress_detail_roro)
                 .selectinload(progress_detail_roro_models.ProgressRoRo.progress_detail_roro_detail),
+                selectinload(progress_models.Progress.progress_detail_container)
+                .selectinload(progress_detail_container_models.ProgressContainer.progress_detail_container_detail),
             )
         )
 

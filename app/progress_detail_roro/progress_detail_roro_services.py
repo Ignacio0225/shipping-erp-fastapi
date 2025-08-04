@@ -17,6 +17,22 @@ class ProgressRoRoServices:
     def __init__(self, db: AsyncSession):
         self.db = db  # 인스턴스의 db로 저장
 
+    @classmethod # 현재 클래스 내부의 인스턴스 상태와 무관한 순수 계산 함수이기 때문에 클래스메서드로 설정
+    def calculate_profit(cls,payload):
+        small = (payload.SMALL or 0) * (payload.BUY_SMALL or 0)  # 달러
+        s_suv = (payload.S_SUV or 0) * (payload.BUY_S_SUV or 0)  # 달러
+        suv = (payload.SUV or 0) * (payload.BUY_SUV or 0)  # 달러
+        rv_cargo = (payload.RV_CARGO or 0) * (payload.BUY_RV_CARGO or 0)  # 달러
+        special = (payload.SPECIAL or 0) * (payload.BUY_SPECIAL or 0)  # 달러
+        cbm = (payload.CBM or 0) * (payload.BUY_CBM or 0)  # 달러
+        other = (payload.HC or 0) + (payload.WFG or 0) + (payload.SECURITY or 0) + (payload.CARRIER or 0) + (
+                (payload.PARTNER_FEE or 0) * (payload.RATE or 1))  # 원화
+        pu = ((payload.SELL or 0) - (small + s_suv + suv + rv_cargo + special + cbm)) + (
+                    other // (payload.RATE or 1)) - (payload.OTHER or 0)
+        pw = ((payload.SELL or 0) - (small + s_suv + suv + rv_cargo + special + cbm)) * (payload.RATE or 1) + other + (
+                payload.OTHER or 0)
+        return pu,pw
+
     # [READ] ProgressRoRo 여러 건 조회 (progress_id 기준, 자식까지)
     async def get_progress_roro(self, progress_id: int):
         # ProgressRoRo 테이블에서 progress_id가 일치하는 데이터 조회 쿼리 생성
@@ -25,8 +41,8 @@ class ProgressRoRoServices:
             # creator, progress_detail_roro_detail, progress 관계도 한 번에 select (N+1 쿼리 방지)
             .options(
                 selectinload(progress_detail_roro_models.ProgressRoRo.creator),
-                selectinload(progress_detail_roro_models.ProgressRoRo.progress)
-                .selectinload(progress_detail_roro_models.ProgressRoRo.progress_detail_roro_detail),
+                selectinload(progress_detail_roro_models.ProgressRoRo.progress),
+                selectinload(progress_detail_roro_models.ProgressRoRo.progress_detail_roro_detail),
             )
             .where(progress_detail_roro_models.ProgressRoRo.progress_id == progress_id)
         )
@@ -41,17 +57,7 @@ class ProgressRoRoServices:
             progress_id: int,  # 상위 progress 연결용 id
     ):
 
-        small = (payload.SMALL or 0) * (payload.BUY_SMALL or 0) # 달러
-        s_suv = (payload.S_SUV or 0) * (payload.BUY_S_SUV or 0) # 달러
-        suv = (payload.SUV or 0) * (payload.BUY_SUV or 0) # 달러
-        rv_cargo = (payload.RV_CARGO or 0) * (payload.BUY_RV_CARGO or 0) # 달러
-        special = (payload.SPECIAL or 0) * (payload.BUY_SPECIAL or 0) # 달러
-        cbm = (payload.CBM or 0) * (payload.BUY_CBM or 0) # 달러
-        other = (payload.HC or 0) + (payload.WFG or 0) + (payload.SECURITY or 0) + (payload.CARRIER or 0) + (
-                    (payload.PARTNER_FEE or 0) * (payload.RATE or 0)) # 원화
-        pu = ((payload.SELL or 0) - (small + s_suv + suv + rv_cargo + special + cbm)) + (other // (payload.RATE or 0)) - (payload.OTHER or 0)
-        pw = ((payload.SELL or 0) - (small + s_suv + suv + rv_cargo + special + cbm)) * (payload.RATE or 0) + other + (
-                    payload.OTHER or 0)
+        pu,pw = self.calculate_profit(payload)
 
         # ProgressRoRo(마스터) 객체 생성, 입력값을 모두 풀어서 넣음 (빈 칸은 자동 제외)
         new_progress = progress_detail_roro_models.ProgressRoRo(
@@ -96,20 +102,10 @@ class ProgressRoRoServices:
             current_user: users_models.User,  # 권한 체크용 유저 정보
             progress_roro_id: int,  # 수정할 ProgressRoRo id
     ):
-        # patch_progress_roro 내부에서
-        small = (payload.SMALL or 0) * (payload.BUY_SMALL or 0)
-        s_suv = (payload.S_SUV or 0) * (payload.BUY_S_SUV or 0)
-        suv = (payload.SUV or 0) * (payload.BUY_SUV or 0)
-        rv_cargo = (payload.RV_CARGO or 0) * (payload.BUY_RV_CARGO or 0)
-        special = (payload.SPECIAL or 0) * (payload.BUY_SPECIAL or 0)
-        cbm = (payload.CBM or 0) * (payload.BUY_CBM or 0)
-        other = (payload.HC or 0) + (payload.WFG or 0) + (payload.SECURITY or 0) + (payload.CARRIER or 0) + (
-                (payload.PARTNER_FEE or 0) * (payload.RATE or 0))
-        pu = ((payload.SELL or 0) - (small + s_suv + suv + rv_cargo + special + cbm)) + (
-                    other // (payload.RATE or 0)) - (payload.OTHER or 0)
-        pw = ((payload.SELL or 0) - (small + s_suv + suv + rv_cargo + special + cbm)) * (payload.RATE or 0) + other + (
-                payload.OTHER or 0)
 
+        pu,pw = self.calculate_profit(payload)
+
+        # patch_progress_roro 내부에서
         # 1. 우선 마스터 객체를 DB에서 가져옴
         progress = await self.db.get(progress_detail_roro_models.ProgressRoRo, progress_roro_id)
         if not progress:

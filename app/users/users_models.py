@@ -24,3 +24,4 @@ class User(Base):
     reply=relationship('Reply',back_populates='creator')
     progress=relationship('Progress',back_populates='creator')
     progress_detail_roro=relationship('ProgressRoRo',back_populates='creator')
+    progress_detail_container = relationship('ProgressContainer', back_populates='creator')

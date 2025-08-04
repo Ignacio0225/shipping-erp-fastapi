@@ -19,14 +19,14 @@ class ReplyCreate(ReplyBase):
 
 #put에 사용
 class ReplyUpdate(ReplyBase):
-    description:str | None
+    description:str | None = None
 
 
 class ReplyOut(ReplyBase):
     id: int
-    description:str | None
+    description:str | None = None
     created_at: datetime
-    updated_at: datetime |None
+    updated_at: datetime |None = None
     creator: users_schemas.UserOut
     posts:posts_schemas.SimplePostOut
 

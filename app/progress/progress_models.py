@@ -24,7 +24,8 @@ class Progress(Base):
     creator = relationship('User', back_populates='progress', passive_deletes=True)  # 유저가 삭제되어도 db에 posts가 남음
 
     progress_detail_roro=relationship('ProgressRoRo',back_populates='progress',cascade='all, delete-orphan',passive_deletes=True)
-
+    progress_detail_container = relationship('ProgressContainer', back_populates='progress', cascade='all, delete-orphan',
+                                        passive_deletes=True)
 
     # creator_id = Column(Integer, ForeignKey('users.id',ondelete='CASCADE')) #users table의 id 컬럼을 참조, CASCADE 유저가 삭제되면 shipments도 삭제
     # creator = relationship('User',backref=backref('shipments',cascade='all, delete'),passive_deletes=True)  # creator는 create를 한 사람을 User 객체로 나타내고 user.shipmets를 통해 user 에서도 연결된 posts 를 가져올 수 있음 passive_deletes=True(user 삭제시 shipment 삭제를 DB에 위임)

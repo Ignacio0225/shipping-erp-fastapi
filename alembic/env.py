@@ -19,6 +19,7 @@ from app.users import users_models               # noqa: F401 (import 해야 메
 from app.posts import posts_models           # noqa: F401 (import 해야 메타데이터에 등록됨)
 from app.progress import progress_models    # noqa: F401 (import 해야 메타데이터에 등록됨)
 from app.progress_detail_roro import progress_detail_roro_models  # noqa: F401 (import 해야 메타데이터에 등록됨)
+from app.progress_detail_container import progress_detail_container_models  # noqa: F401 (import 해야 메타데이터에 등록됨)
 from app.replies import replies_models           # noqa: F401 (import 해야 메타데이터에 등록됨)
 from app.categories.type_categories import type_categories_models     # noqa: F401 (import 해야 메타데이터에 등록됨)
 from app.categories.region_categories import region_categories_models     # noqa: F401 (import 해야 메타데이터에 등록됨)
